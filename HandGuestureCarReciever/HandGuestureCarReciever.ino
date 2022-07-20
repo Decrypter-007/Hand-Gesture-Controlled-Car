@@ -1,147 +1,88 @@
-/*KESHAV _B Nov'2020
-*/
+/* Created by KESHAV_B 
+ */
 
 #include <SPI.h>
-#include <NRFLite.h>
+#include <nRF24L01.h>
+#include <RF24.h>
+const uint64_t pipeIn = 0xE8E8F0F0E1LL; 
 
-//Initializing the variables
-boolean x = 0;
-int directionOfMovement = 0;
-int leftMotorForward = 2;
-int leftMotorBackward = 3;
-int rightMotorForward = 4;
-int rightMotorBackward = 5;
-String message;
-const static uint8_t RADIO_ID = 3;       // Our radio's id.  The transmitter will send to this id.
-const static uint8_t PIN_RADIO_CE = 7;
-const static uint8_t PIN_RADIO_CSN = 8;
+RF24 radio(9, 10);
 
-struct RadioPacket { // Any packet up to 32 bytes can be sent.
+// Left & Right motor pins
+const int IN1 = 2;    
+const int IN2 = 3;    
+const int IN3 = 4;     
+const int IN4 = 5;    
 
-  uint8_t FromRadioId;
-  uint32_t Data;
-  uint32_t FailedTxCount;
-
+struct MyData {
+  byte X; 
+  byte Y;
 };
 
-//Create NRF object
-NRFLite _radio;
-RadioPacket _radioData;
+MyData data;
 
-void setup() {
-
-  Serial.begin(9600);
-
-  //Set the pin modes
-  pinMode(9, OUTPUT);
-  pinMode(10, OUTPUT);
-  pinMode(12, OUTPUT);
-  pinMode(13, OUTPUT);
-
-  if (!_radio.init(RADIO_ID, PIN_RADIO_CE, PIN_RADIO_CSN)) {
-
-    Serial.println("Cannot communicate with radio");
-    while (1); // Wait here forever.
-
-  }
+void setup()
+{
+  Serial.begin(9600); 
+  radio.begin();
+  radio.setAutoAck(false);
+  radio.setDataRate(RF24_250KBPS);
+  radio.openReadingPipe(1, pipeIn);
+  radio.startListening();
 
 }
 
-void loop() {
+void recvData()
+{
+  if ( radio.available() ) {
+    radio.read(&data, sizeof(MyData));
 
-  while (_radio.hasData()) {
 
-    _radio.readData(&_radioData); // Note how '&' must be placed in front of the variable name.
+    if (data.Y < 80) { //Reverse
+      digitalWrite(IN1, HIGH);
+      digitalWrite(IN2, LOW);
+      digitalWrite(IN3, LOW);
+      digitalWrite(IN4, HIGH);
 
-    message = _radioData.Data;
-    Serial.println(message);
-    directionOfMovement = message.toInt();
-    moveAccordingly();
+    }
 
+    if (data.Y > 145) {//forward
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, HIGH);
+      digitalWrite(IN3, HIGH);
+      digitalWrite(IN4, LOW);
+    }
+
+    if (data.X > 155) {//right turn
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, HIGH);
+      digitalWrite(IN3, LOW);
+      digitalWrite(IN4, HIGH);
+    }
+
+    if (data.X < 80) {//left turn
+      digitalWrite(IN1, HIGH);
+      digitalWrite(IN2, LOW);
+      digitalWrite(IN3, HIGH);
+      digitalWrite(IN4, LOW);
+    }
+
+    if (data.X > 100 && data.X < 170 && data.Y > 80 && data.Y < 140) { //stop car
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, LOW);
+      digitalWrite(IN3, LOW);
+      digitalWrite(IN4, LOW);
+    }
   }
-
 }
 
-//this function moves the car according to the message
-void moveAccordingly() {
-
-  if (directionOfMovement == 1) {
-
-    front();
-    Serial.println("front");
-
-  }
-
-  else if (directionOfMovement == 2) {
-
-    back();
-    Serial.println("back");
-
-  }
-
-  else if (directionOfMovement == 3) {
-
-    left();
-    Serial.println("left");
-
-  }
-
-  else if (directionOfMovement == 4) {
-
-    right();
-    Serial.println("right");
-
-  }
-
-  else if (directionOfMovement == 0) {
-
-    none();
-    Serial.println("none");
-
-  }
-
-}
-
-void front() {
-
-  digitalWrite(leftMotorForward, HIGH);
-  digitalWrite(rightMotorForward, HIGH);
-  digitalWrite(leftMotorBackward, LOW);
-  digitalWrite(rightMotorBackward, LOW);
-
-}
-
-void back() {
-
-  digitalWrite(leftMotorBackward, HIGH);
-  digitalWrite(rightMotorBackward, HIGH);
-  digitalWrite(leftMotorForward, LOW);
-  digitalWrite(rightMotorForward, LOW);
-
-}
-
-void left() {
-
-  digitalWrite(leftMotorForward, LOW);
-  digitalWrite(rightMotorForward, HIGH);
-  digitalWrite(leftMotorBackward, LOW);
-  digitalWrite(rightMotorBackward, LOW);
-
-}
-void right() {
-
-  digitalWrite(leftMotorForward, HIGH);
-  digitalWrite(rightMotorForward, LOW);
-  digitalWrite(leftMotorBackward, LOW);
-  digitalWrite(rightMotorBackward, LOW);
-
-}
-
-void none() {
-
-  digitalWrite(leftMotorForward, LOW);
-  digitalWrite(rightMotorForward, LOW);
-  digitalWrite(leftMotorBackward, LOW);
-  digitalWrite(rightMotorBackward, LOW);
-
+void loop()
+{
+  recvData();
+  Serial.print("X: ");
+  Serial.print(data.X);
+  Serial.print("    ");
+  Serial.print("Y: ");
+  Serial.print(data.Y);
+  Serial.print("\n");
 }

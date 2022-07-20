@@ -1,128 +1,55 @@
-/*KESHAV _B Nov'2020
-*/
+/*Created By KESHAV_B 
+ */
 
-#include <Wire.h>
-#include <TinyMPU6050.h>
 #include <SPI.h>
-#include <NRFLite.h>
+#include <nRF24L01.h>
+#include <RF24.h>
+#include "Wire.h"       
+#include "I2Cdev.h"     
+#include "MPU6050.h"    
 
-MPU6050 mpu (Wire);
+//Define variables for Gyroscope and Accelerometer data
 
-int message;
+MPU6050 mpu;
+int16_t ax, ay, az;
+int16_t gx, gy, gz;
 
-const static uint8_t RADIO_ID = 3;             // Our radio's id.
-const static uint8_t DESTINATION_RADIO_ID = 0; // Id of the radio we will transmit to.
-const static uint8_t PIN_RADIO_CE = 7;
-const static uint8_t PIN_RADIO_CSN = 8;
+const uint64_t pipeOut = 0xE8E8F0F0E1LL; 
 
-struct RadioPacket { // Any packet up to 32 bytes can be sent.
+RF24 radio(9, 10); //  CN and CSN  pins of nrf
 
-  uint8_t FromRadioId;
-  uint32_t Data;
-  uint32_t FailedTxCount;
-
+struct MyData {
+  byte X;
+  byte Y;
 };
 
-//Create NRF24 object
-NRFLite _radio;
-RadioPacket _radioData;
+MyData data;
 
-void setup() {
-
-  // Initialization
-  mpu.Initialize();
-  // Calibration (wait for about 20s to calibrate)
-  mpu.Calibrate();
-
-  //start up
+void setup()
+{
   Serial.begin(9600);
-  Serial.println("Done Clabration");
+  Wire.begin();
+  mpu.initialize();
 
-  if (!_radio.init(RADIO_ID, PIN_RADIO_CE, PIN_RADIO_CSN)) {
-
-    Serial.println("Cannot communicate with radio");
-    while (1); // Wait here forever.
-  }
-
-  _radioData.FromRadioId = RADIO_ID;
-
+  radio.begin();
+  radio.setAutoAck(false);
+  radio.setDataRate(RF24_250KBPS);
+  radio.openWritingPipe(pipeOut);
 }
 
-void loop() {
+void loop()
+{
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
-  mpu.Execute();
+  data.X = map(ax, -17000, 17000, 0, 255 ); //Send X axis data
+  data.Y = map(ay, -17000, 17000, 0, 255);  //Send Y axis data
 
-  while (mpu.GetRawAccX() <= -8000) {
+  delay(50);
+  radio.write(&data, sizeof(MyData));
 
-    //send msg to move front
-    message = 1;
-    _radioData.Data = message;
-    sendData();
-    Serial.println("front");
-    mpu.Execute();
-
-  }
-
-  while (mpu.GetRawAccX() >= 8000) {
-
-    //send msg to move back
-    message = 2;
-    sendData();
-    _radioData.Data = message;
-    Serial.println("back");
-    mpu.Execute();
-
-  }
-
-  while (mpu.GetRawAccY() <= -8000) {
-
-    //send msg to move left
-    message = 3;
-    sendData();
-    _radioData.Data = message;
-    Serial.println("left");
-    mpu.Execute();
-
-  }
-
-  while (mpu.GetRawAccY() >= 8000) {
-
-    //send msg to move right
-    message = 4;
-    sendData();
-    _radioData.Data = message;
-    Serial.println("right");
-    mpu.Execute();
-
-  }
-
-  while (mpu.GetRawAccX() < 8000 and mpu.GetRawAccX() > -8000 and mpu.GetRawAccY() < 8000 and mpu.GetRawAccY() > -8000) {
-
-    //send msg to stop
-    message = 0;
-    sendData();
-    _radioData.Data = message;
-    Serial.println("none");
-    mpu.Execute();
-
-  }
-
-}
-
-void sendData() {
-
-  if (_radio.send(DESTINATION_RADIO_ID, &_radioData, sizeof(_radioData))) { // Note how '&' must be placed in front of the variable name.
-
-  }
-
-  else {
-
-    Serial.println("Failed");
-    _radioData.FailedTxCount++;
-
-  }
-
-  delay(500);
-  mpu.Execute();
-
+  Serial.print("Axis X = ");
+  Serial.print(data.X);
+  Serial.print("  ");
+  Serial.print("Axis X = ");
+  Serial.println(data.X);
 }
